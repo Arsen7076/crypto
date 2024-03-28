@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -34,17 +34,27 @@ contract MyToken is ERC20 {
     uint public  tokenPrice;
     uint public allSold;
     uint public minSold;
+    uint8 public  feePercentage;
     modifier  onlyOwner{
         require(msg.sender == owner, "You aren't owner");
         _;
     } 
 
-    constructor(string memory _name, string memory _symbol, address _mintAddress, uint _amountMint, uint _minSold) ERC20(_name, _symbol) {
+
+    // Define events
+    event FeeTransfered(address indexed from, address indexed to, uint256 value);
+    event TokensBurned(address indexed burner, uint256 amount);
+    event TokensBought(address indexed buyer, uint256 amountSpent, uint256 tokensReceived);
+    event TokensSold(address indexed seller, uint256 tokensSold, uint256 amountReceived);
+
+
+    constructor(string memory _name, string memory _symbol, address _mintAddress, uint _amountMint, uint _minSold, uint8 _fee) ERC20(_name, _symbol) {
         owner = msg.sender;
         whitelist[owner] = true;
         tokenPrice = 1;
         _mint(_mintAddress, _amountMint);
         minSold = _minSold;
+        feePercentage = _fee;
     }
     function setPrice(uint _price)external  onlyOwner{
         tokenPrice = _price;
@@ -68,21 +78,38 @@ contract MyToken is ERC20 {
     function transfer(address recipient, uint256 amount) public override returns (bool) {
         require(whitelist[msg.sender] || whitelist[recipient] || allSold >=  minSold, "Sender or receiver is not whitelisted");
         allSold+= amount;
-        return super.transfer(recipient, amount);
+        uint256 fee = (amount * feePercentage) / 100;
+        uint256 amountAfterFee = amount - fee;
+
+        // Transfer the fee to a specific address (e.g., the contract owner)
+        super.transfer(owner, fee);
+        emit  FeeTransfered(recipient, owner, fee);
+        
+    
+        return super.transfer(recipient, amountAfterFee);
     }
 
     // Override the transferFrom function
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         require(whitelist[sender] || whitelist[recipient] || allSold >=  minSold, "Sender or receiver is not whitelisted");
         allSold+= amount;
+        uint256 fee = (amount * feePercentage) / 100;
+        uint256 amountAfterFee = amount - fee;
 
-        return super.transferFrom(sender, recipient, amount);
+        // Transfer the fee to a specific address (e.g., the contract owner)
+        super.transferFrom(sender, owner, fee);
+        emit  FeeTransfered(recipient, owner, fee);
+        
+    
+        return super.transferFrom(sender, recipient, amountAfterFee);
     }
     // Buy tokens by sending Ether
     function buyTokens() external payable  {
         require(msg.value > 0, "Value can't be 0");
         uint256 tokenAmount = msg.value/tokenPrice; // 1 ETH = 1 token for simplicity
         _mint(msg.sender, tokenAmount);
+        emit TokensBought(msg.sender, msg.value, tokenAmount);
+
     }
     
     function sellTokens(uint256 amount) external {
@@ -92,6 +119,7 @@ contract MyToken is ERC20 {
         require(whitelist[msg.sender] || allSold >=  minSold, "Sender is not whitelisted");
         _burn(msg.sender, amount);
         allSold += amount;
+        emit TokensSold(msg.sender, amount, ethAmount);
         payable(msg.sender).transfer(ethAmount);
     }
 
@@ -122,4 +150,14 @@ contract MyToken is ERC20 {
         IERC20(token).transfer(owner, amount);
     }
 
+    function burn(uint value)external {
+        require(value <= balanceOf(msg.sender), "You Don't have enough tokens");
+        _burn(msg.sender, value);
+        emit TokensBurned(msg.sender, value);
+    }
+
+    function setFeePercentage(uint8 _fee) external onlyOwner{
+        require(_fee <= 99, "You cen't set that value!");
+        feePercentage = _fee;
+    }
 }
