@@ -30,13 +30,10 @@ interface IDEXRouter {
 
 // MyToken contract inheriting ERC20 standard
 contract MyToken is ERC20 {
-    mapping(address => bool) public whitelist; // Tracks addresses that are whitelisted
     address public owner; // Owner of the contract
     IDEXRouter public router; // DEX router interface
     address public pair; // Address of the token pair on DEX
     uint public tokenPrice; // Price of the token for buying/selling
-    uint public allSold; // Tracks how many tokens have been sold
-    uint public minSold; // Minimum number of tokens that need to be sold before transfers are open to everyone
     uint8 public feePercentage; // Fee percentage on transfers
 
     // Events declaration
@@ -57,15 +54,12 @@ contract MyToken is ERC20 {
         string memory _symbol, 
         address _mintAddress, 
         uint _amountMint, 
-        uint _minSold, 
         uint8 _fee
     ) ERC20(_name, _symbol) {
         owner = msg.sender;
-        whitelist[owner] = true;
-        whitelist[_mintAddress];
         tokenPrice = 1 ether; // Assuming price is 1 Ether per token
         _mint(_mintAddress, _amountMint);
-        minSold = _minSold;
+        require(_fee <= 49, "Fee can't bee higher than 49%");
         feePercentage = _fee;
     }
 
@@ -74,28 +68,14 @@ contract MyToken is ERC20 {
         tokenPrice = _price;
     }
 
-    // Add an address to the whitelist, allowing it to transfer tokens freely
-    function addToWhitelist(address _address) external onlyOwner {
-        whitelist[_address] = true;
-    }
-
-    // Remove an address from the whitelist
-    function removeFromWhitelist(address _address) external onlyOwner {
-        whitelist[_address] = false;
-    }
-
     // Override ERC20 approve function with custom logic for whitelist and token sale minimum
     function approve(address spender, uint256 amount) public override returns (bool) {
-        if ((!whitelist[msg.sender] || !whitelist[spender]) && allSold < minSold) {
-            return super.approve(spender, 0);
-        }
+
         return super.approve(spender, amount);
     }
 
     // Override ERC20 transfer function with fee deduction and whitelist logic
     function transfer(address recipient, uint256 amount) public override returns (bool) {
-        require(whitelist[msg.sender] || whitelist[recipient] || allSold >= minSold, "Sender or receiver is not whitelisted");
-        allSold += amount;
         uint256 fee = (amount * feePercentage) / 100;
         uint256 amountAfterFee = amount - fee;
 
@@ -143,11 +123,5 @@ contract MyToken is ERC20 {
     function burn(uint value) external {
         _burn(msg.sender, value);
         emit TokensBurned(msg.sender, value);
-    }
-
-    // Owner-only function to adjust the fee percentage
-    function setFeePercentage(uint8 _fee) external onlyOwner {
-        require(_fee <= 99, "Fee too high");
-        feePercentage = _fee;
     }
 }
