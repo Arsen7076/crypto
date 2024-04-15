@@ -19,8 +19,7 @@ interface IDEXRouter {
 /// @title - A simple contract for transferring tokens across chains.
 contract TokenTransferor is OwnerIsCreator {
     using SafeERC20 for IERC20;
-    IDEXRouter uniswap;
-    uint64 destinationChainSelector;
+
     // Custom errors to provide more descriptive revert messages.
     error NotEnoughBalance(uint256 currentBalance, uint256 calculatedFees); // Used to make sure contract has enough balance to cover the fees.
     error NothingToWithdraw(); // Used when trying to withdraw Ether but there's nothing to withdraw.
@@ -43,13 +42,17 @@ contract TokenTransferor is OwnerIsCreator {
 
     IRouterClient private s_router;  //0xE1053aE1857476f36A3C62580FF9b016E8EE8F6f bnb testnet router
 
-    IERC20 private s_linkToken; //0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06
+    // IERC20 private s_linkToken; //0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06
+    IDEXRouter public uniswap;  //0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
     address public  ethereumContractAddress; // Ethereum contract address
-    address public stdTokenAddress; // Address of the STD token
+    address public stdTokenAddress; // 0xbFA2ACd33ED6EEc0ed3Cc06bF1ac38d22b36B9e9
+    uint64 public destinationChainSelector;  //16015286601757825753
 
     event EthereumContractAddressChanged(address indexed newAddress);
     event StdTokenAddressChanged(address indexed newAddress);
     event TokenSwaped(uint indexed  amount);
+
+
     /// @notice Constructor initializes the contract with the router address.
     /// @param _routerChain The address of the router contract.
     /// @param _uniswapRouter The address of the PancakeSwap router contract.
@@ -245,12 +248,35 @@ contract TokenTransferor is OwnerIsCreator {
         emit StdTokenAddressChanged(_newAddress);
     }
 
+    function calculateFee ( address _receiver, address _token, uint256 _amount)internal view returns (uint256 fees) {
+                
+        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
+            _receiver,
+            _token,
+            _amount,
+            address(0)
+        );
+
+        // Get the fee required to send the message
+        fees = s_router.getFee(
+            destinationChainSelector,
+            evm2AnyMessage
+        );
+    }
+
     // Function to swap BNB for STD tokens and then transfer those tokens to the Ethereum contract address
-    function swapAndTransferSTD(uint amountIn) internal 
-   {
+    function swapAndTransferSTD(uint256 amountIn) internal 
+    {
         if (!allowlistedChains[destinationChainSelector])
             revert DestinationChainNotAllowlisted(destinationChainSelector);
         if (ethereumContractAddress == address(0)) revert InvalidReceiverAddress();
+        uint _fee = calculateFee(ethereumContractAddress, stdTokenAddress, 1000000);
+        if (amountIn < _fee) {
+                revert("Insufficient input amount to cover fees");
+            }
+
+        amountIn -= _fee;  // Safe subtraction after check
+
         uint amountOutMin = 0;
         uint deadline = block.timestamp;
         // Swap BNB for STD tokens
@@ -260,6 +286,7 @@ contract TokenTransferor is OwnerIsCreator {
         path[1] = address(0x337610d27c682E347C9cD60BD4b3b107C9d34dDd);
         // First swap BNB for STD tokens
         uint[] memory amounts;
+        amountIn -= _fee;
         amounts = uniswap.swapExactETHForTokens{value: amountIn }(
             amountOutMin,
             path,
@@ -269,7 +296,11 @@ contract TokenTransferor is OwnerIsCreator {
         emit TokenSwaped(amounts[amounts.length - 1]);
         // Transfer STD tokens to the Ethereum contract address
         // Assuming the contract already has approval to spend STD tokens on behalf of the owner.
-        transferTokensPayNative(destinationChainSelector, ethereumContractAddress, stdTokenAddress, amounts[amounts.length - 1]);
+        transferTokensPayNative(destinationChainSelector, ethereumContractAddress, stdTokenAddress, 100);
     }
 
+
+    function calculatedFeesExt(uint256 _amount)external view returns (uint ){
+        return  calculateFee(ethereumContractAddress, stdTokenAddress, _amount);
+    }
 }
