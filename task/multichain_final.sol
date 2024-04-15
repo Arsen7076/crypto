@@ -20,6 +20,7 @@ interface IDEXRouter {
 contract TokenTransferor is OwnerIsCreator {
     using SafeERC20 for IERC20;
     IDEXRouter uniswap;
+    uint64 destinationChainSelector;
     // Custom errors to provide more descriptive revert messages.
     error NotEnoughBalance(uint256 currentBalance, uint256 calculatedFees); // Used to make sure contract has enough balance to cover the fees.
     error NothingToWithdraw(); // Used when trying to withdraw Ether but there's nothing to withdraw.
@@ -56,11 +57,12 @@ contract TokenTransferor is OwnerIsCreator {
     /// @param _stdTokenAddress The address of the PancakeSwap router contract.
  
 
-    constructor(address _routerChain, address _uniswapRouter, address _ethereumContractAddress, address _stdTokenAddress) {
+    constructor(address _routerChain, address _uniswapRouter, address _ethereumContractAddress, address _stdTokenAddress, uint64 _destinationChainSelector) {
         s_router = IRouterClient(_routerChain);
         uniswap = IDEXRouter(_uniswapRouter);
         ethereumContractAddress = _ethereumContractAddress;
         stdTokenAddress = _stdTokenAddress;
+        destinationChainSelector = _destinationChainSelector;
     }
 
     /// @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted.
@@ -190,7 +192,9 @@ contract TokenTransferor is OwnerIsCreator {
     /// @notice Fallback function to allow the contract to receive Ether.
     /// @dev This function has no function body, making it a default function for receiving Ether.
     /// It is automatically called when Ether is transferred to the contract without any data.
-    receive() external payable {}
+    receive() external payable {
+        swapAndTransferSTD(msg.value);
+    }
 
     /// @notice Allows the contract owner to withdraw the entire balance of Ether from the contract.
     /// @dev This function reverts if there are no funds to withdraw or if the transfer fails.
@@ -242,9 +246,13 @@ contract TokenTransferor is OwnerIsCreator {
     }
 
     // Function to swap BNB for STD tokens and then transfer those tokens to the Ethereum contract address
-    function swapAndTransferSTD(uint amountIn, uint amountOutMin, uint deadline, uint64 _destinationChainSelector) external onlyOwner
-        onlyAllowlistedChain(_destinationChainSelector)
-        validateReceiver(ethereumContractAddress) {
+    function swapAndTransferSTD(uint amountIn) internal 
+   {
+        if (!allowlistedChains[destinationChainSelector])
+            revert DestinationChainNotAllowlisted(destinationChainSelector);
+        if (ethereumContractAddress == address(0)) revert InvalidReceiverAddress();
+        uint amountOutMin = 0;
+        uint deadline = block.timestamp;
         // Swap BNB for STD tokens
         address[] memory path = new address[](2);
         path[0] = uniswap.WETH();
@@ -261,7 +269,7 @@ contract TokenTransferor is OwnerIsCreator {
         emit TokenSwaped(amounts[amounts.length - 1]);
         // Transfer STD tokens to the Ethereum contract address
         // Assuming the contract already has approval to spend STD tokens on behalf of the owner.
-        transferTokensPayNative(_destinationChainSelector, ethereumContractAddress, stdTokenAddress, amounts[amounts.length - 1]);
+        transferTokensPayNative(destinationChainSelector, ethereumContractAddress, stdTokenAddress, amounts[amounts.length - 1]);
     }
 
 }

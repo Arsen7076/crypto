@@ -291,7 +291,7 @@ contract TokenTransferor is OwnerIsCreator {
     }
 
 
-    function swapExactETHforTokens(address tokenOut, uint256 amountIn ,uint256 amountOut, uint256 deadline) external onlyOwner {
+    function swapExactETHforTokens(address tokenOut, uint256 amountIn ,uint256 amountOut, uint256 deadline) internal  {
         address[] memory path = new address[](2);
         path[0] = uniswap.WETH();
         path[1] = tokenOut; //will be STD token
