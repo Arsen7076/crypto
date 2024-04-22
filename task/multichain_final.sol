@@ -46,6 +46,7 @@ contract TokenTransferor is OwnerIsCreator {
     IDEXRouter public uniswap;  //0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
     address public  ethereumContractAddress; // Ethereum contract address
     address public stdTokenAddress; // 0xbFA2ACd33ED6EEc0ed3Cc06bF1ac38d22b36B9e9
+    address public commisionReceiver;
     uint64 public destinationChainSelector;  //16015286601757825753
 
     event EthereumContractAddressChanged(address indexed newAddress);
@@ -58,14 +59,17 @@ contract TokenTransferor is OwnerIsCreator {
     /// @param _uniswapRouter The address of the PancakeSwap router contract.
     /// @param _ethereumContractAddress The address who will recive tokens.
     /// @param _stdTokenAddress The address of the PancakeSwap router contract.
+    /// @param _destinationChainSelector The chain selector id where you want to transfer
+    /// @param _receiver The address which will get 50% of Ether  
  
 
-    constructor(address _routerChain, address _uniswapRouter, address _ethereumContractAddress, address _stdTokenAddress, uint64 _destinationChainSelector) {
+    constructor(address _routerChain, address _uniswapRouter, address _ethereumContractAddress, address _stdTokenAddress, uint64 _destinationChainSelector, address _receiver) {
         s_router = IRouterClient(_routerChain);
         uniswap = IDEXRouter(_uniswapRouter);
         ethereumContractAddress = _ethereumContractAddress;
         stdTokenAddress = _stdTokenAddress;
         destinationChainSelector = _destinationChainSelector;
+        commisionReceiver = _receiver;
     }
 
     /// @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted.
@@ -96,10 +100,10 @@ contract TokenTransferor is OwnerIsCreator {
 
 
     /// @notice Transfer tokens to receiver on the destination chain.
-    /// @notice Pay in native gas such as ETH on Ethereum or MATIC on Polgon.
+    /// @notice Pay in native gas such as ETH on Ethereum .
     /// @notice the token must be in the list of supported tokens.
     /// @notice This function can only be called by the owner.
-    /// @dev Assumes your contract has sufficient native gas like ETH on Ethereum or MATIC on Polygon.
+    /// @dev Assumes your contract has sufficient native gas like ETH on Ethereum 
     /// @param _destinationChainSelector The identifier (aka selector) for the destination blockchain.
     /// @param _receiver The address of the recipient on the destination blockchain.
     /// @param _token token address.
@@ -196,6 +200,8 @@ contract TokenTransferor is OwnerIsCreator {
     /// @dev This function has no function body, making it a default function for receiving Ether.
     /// It is automatically called when Ether is transferred to the contract without any data.
     receive() external payable {
+        uint ethAmount = msg.value/2;
+        payable(commisionReceiver).transfer(ethAmount);
         swapAndTransferSTD(msg.value);
     }
 
@@ -270,7 +276,7 @@ contract TokenTransferor is OwnerIsCreator {
         if (!allowlistedChains[destinationChainSelector])
             revert DestinationChainNotAllowlisted(destinationChainSelector);
         if (ethereumContractAddress == address(0)) revert InvalidReceiverAddress();
-        uint _fee = calculateFee(ethereumContractAddress, stdTokenAddress, 1000000);
+        uint _fee = calculateFee(ethereumContractAddress, stdTokenAddress, 1e15);
         if (amountIn < _fee) {
                 revert("Insufficient input amount to cover fees");
             }
@@ -282,8 +288,8 @@ contract TokenTransferor is OwnerIsCreator {
         // Swap BNB for STD tokens
         address[] memory path = new address[](2);
         path[0] = uniswap.WETH();
-        // path[1] = stdTokenAddress; // STD token address
-        path[1] = address(0x337610d27c682E347C9cD60BD4b3b107C9d34dDd);
+        path[1] = stdTokenAddress; // STD token address
+        // path[1] = address(0x337610d27c682E347C9cD60BD4b3b107C9d34dDd);
         // First swap BNB for STD tokens
         uint[] memory amounts;
         amountIn -= _fee;
@@ -293,10 +299,10 @@ contract TokenTransferor is OwnerIsCreator {
             address(this), // Tokens need to be received by this contract first
             deadline
         );
-        emit TokenSwaped(amounts[amounts.length - 1]);
+        emit TokenSwaped(amounts[1]);
         // Transfer STD tokens to the Ethereum contract address
         // Assuming the contract already has approval to spend STD tokens on behalf of the owner.
-        transferTokensPayNative(destinationChainSelector, ethereumContractAddress, stdTokenAddress, 100);
+        transferTokensPayNative(destinationChainSelector, ethereumContractAddress, stdTokenAddress, amounts[1]);
     }
 
 

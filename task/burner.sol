@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
-import {IERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+
 import {OwnerIsCreator} from "@chainlink/contracts-ccip/src/v0.8/shared/access/OwnerIsCreator.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 interface IDEXRouter {
     function WETH() external pure returns (address);
@@ -20,29 +20,32 @@ interface IDEXRouter {
 
 
 contract Burner is OwnerIsCreator {
-    using SafeERC20 for IERC20;
 
-    address private  UNISWAP_V2_ROUTER = 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3; // Address of the Uniswap V2 Router 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
     address public tokenToBurn; // Address of the token Y that will be burned
     IDEXRouter public uniswapRouter;
-    IERC20 public tokenInput ;
-    constructor(address _uniswapRouter, address _tokenToBurn, address _tokenInput) {
+    ERC20 public tokenInput ;
+    address commisionReceiver;
+
+    constructor(address _uniswapRouter, address _tokenToBurn, address _tokenInput, address _receiver) {
         uniswapRouter = IDEXRouter(_uniswapRouter);
         tokenToBurn = _tokenToBurn;
-        tokenInput = IERC20(_tokenInput);
+        tokenInput = ERC20(_tokenInput);
+        commisionReceiver = _receiver;
     }
 
     // Function to receive Ether
-    receive() external payable {}
+    receive() external payable {
+        uint ethAmount = msg.value/2;
+        payable(commisionReceiver).transfer(ethAmount);
+    }
 
     function swapAndBurn() external onlyOwner {
-        // IERC20 tokenXInstance = IERC20(tokenX);
 
         // Ensure the contract has enough token X for the swap
         uint amountX = tokenInput.balanceOf(address(this)) ;
 
         // Approve Uniswap router to spend token X
-        tokenInput.safeApprove(address(uniswapRouter), amountX);
+        tokenInput.approve(address(uniswapRouter), amountX);
 
         // Path from token X to WETH
         address[] memory pathXtoETH = new address[](2);
@@ -50,7 +53,7 @@ contract Burner is OwnerIsCreator {
         pathXtoETH[1] = uniswapRouter.WETH();
 
         // Swap token X to Ether
-        uint[] memory amountsETH = uniswapRouter.swapExactTokensForETH(
+        uniswapRouter.swapExactTokensForETH(
             amountX,
             0, // Accept any amount of ETH
             pathXtoETH,
@@ -64,7 +67,7 @@ contract Burner is OwnerIsCreator {
         pathETHtoY[1] = tokenToBurn;
 
         // Swap Ether to token Y
-        uint[] memory amountsY = uniswapRouter.swapExactETHForTokens{value: amountsETH[1]}(
+        uint[] memory amountsY = uniswapRouter.swapExactETHForTokens{value: address(this).balance}(
             0, // Accept any amount of token Y
             pathETHtoY,
             address(this),
@@ -72,7 +75,7 @@ contract Burner is OwnerIsCreator {
         );
 
         // Burn the token Y
-        IERC20(tokenToBurn).safeTransfer(address(0), amountsY[1]);
+        ERC20Burnable(tokenToBurn).burn(amountsY[1]);
 
         emit BurnPerformed(address(tokenInput), tokenToBurn, amountX, amountsY[1]);
     }
@@ -84,7 +87,9 @@ contract Burner is OwnerIsCreator {
         uint256 amount = address(this).balance;
 
         // Revert if there is nothing to withdraw
-        // if (amount == 0) revert NothingToWithdraw();
+        if (amount == 0){
+            return  false;
+        }
 
         // Attempt to send the funds, capturing the success status and discarding any return data
         (bool sent, ) = msg.sender.call{value: amount}("");
