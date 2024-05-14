@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -10,7 +10,7 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
     // Event declarations
     event NFTDeposited(address indexed owner, address indexed nftAddress, uint256 indexed tokenId);
     event NFTWithdrawn(address indexed owner, address indexed nftAddress, uint256 indexed tokenId);
-
+    address auctionContract;
     // This struct stores information about each NFT held by the contract.
     struct NFTData {
         address owner;
@@ -82,7 +82,14 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
      * @dev Marks the auction as complete for a specific NFT.
      * @param index The index of the NFT in the registry.
      */
-    function completeAuction(uint256 index) external onlyOwner {
+    function endAuction(uint256 index, address newOwner) external  {
+        require(msg.sender == auctionContract, "Only auction contract can end");
         nftRegistry[index].isAuctionActive = false;
+        nftRegistry[index].owner = newOwner;
+    }
+
+    function setAuctionContract(address _auctionContract)external onlyOwner{
+        require(_auctionContract !=address(0), "Can't be address 0");
+        auctionContract = _auctionContract;
     }
 }
