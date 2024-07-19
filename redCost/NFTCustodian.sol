@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+// import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 // import "@openzeppelin/contracts/access/Ownable.sol";
 import {OwnerIsCreator} from "@chainlink/contracts-ccip/src/v0.8/shared/access/OwnerIsCreator.sol";
+
 
 contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
     // Event declarations
@@ -17,6 +20,8 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
         address nftAddress;
         uint256 tokenId;
         bool isAuctionActive;
+        string tokenURI;
+        uint256 tokenIndex;
     }
 
     // This mapping tracks all NFTs held by the contract.
@@ -29,16 +34,19 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
      * @param tokenId The ID of the NFT being deposited.
      */
     function depositNFT(address nftAddress, uint256 tokenId) external nonReentrant {
-        IERC721 nft = IERC721(nftAddress);
+        ERC721 nft = ERC721(nftAddress);
         require(nft.ownerOf(tokenId) == msg.sender, "You must own the NFT to deposit it.");
         nft.transferFrom(msg.sender, address(this), tokenId);
-
-        uint256 index = nextNftIndex++;
+        string memory _tokenURI = nft.tokenURI(tokenId);
+        uint256 index = nextNftIndex;
+        nextNftIndex+=1;
         nftRegistry[index] = NFTData({
             owner: msg.sender,
             nftAddress: nftAddress,
             tokenId: tokenId,
-            isAuctionActive: true
+            isAuctionActive: true,
+            tokenURI: _tokenURI,
+            tokenIndex: index
         });
 
         emit NFTDeposited(msg.sender, nftAddress, tokenId);
@@ -53,7 +61,7 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
         require(data.owner == msg.sender, "Only the owner can withdraw the NFT.");
         require(!data.isAuctionActive, "Cannot withdraw while the auction is active.");
 
-        IERC721(data.nftAddress).transferFrom(address(this), msg.sender, data.tokenId);
+        ERC721(data.nftAddress).transferFrom(address(this), msg.sender, data.tokenId);
         delete nftRegistry[index];
 
         emit NFTWithdrawn(msg.sender, data.nftAddress, data.tokenId);
@@ -71,7 +79,7 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
         require(newData.isAuctionActive, "Auction must be active to transfer NFT.");
         require(oldData.isAuctionActive, "Auction must be active to transfer NFT.");
 
-        IERC721(oldData.nftAddress).transferFrom(address(this), newData.owner, oldData.tokenId);
+        ERC721(oldData.nftAddress).transferFrom(address(this), newData.owner, oldData.tokenId);
         newData.isAuctionActive = false;
         oldData.isAuctionActive = false;
 

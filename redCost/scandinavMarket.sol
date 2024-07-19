@@ -28,7 +28,8 @@ contract Market is OwnerIsCreator {
         uint256 currentPrice;
         uint256 decrementStep;
         bool isActive;
-        address lastBider;
+        address ownerOf;
+        uint256 startTime;
     }
 
     struct User {
@@ -43,9 +44,9 @@ contract Market is OwnerIsCreator {
     address payable public gasWallet;
 
     uint256 public constant MINIMUM_PRICE = 99 ether;
-    uint256 public constant MINIMUM_STEP = 2 ether;
-
-    event PriceDecreased(uint256 indexed tokenId, uint256 newPrice);
+    uint256 public  step = 2 ether;
+    event PriceDecreased(uint256 indexed tokenId, uint256 newPrice, address whoDecreased);
+    event AuctionConcluded(uint256 indexed  tokenId, address buyer, uint256 price);
 
     constructor(
         address _custodian,
@@ -59,9 +60,8 @@ contract Market is OwnerIsCreator {
         gasWallet = _gasWallet;
     }
 
-    function setAuctionParameters(uint256 tokenId, uint256 price, uint256 step) external onlyOwner {
+    function setAuctionParameters(uint256 tokenId, uint256 price) external onlyOwner {
         require(price >= MINIMUM_PRICE, "Price must be at least $99");
-        require(step >= MINIMUM_STEP, "Step must be at least $2");
         require(custodian.nftRegistry(tokenId).isAuctionActive, "Auctoin is not allowed ");
         // custodian.registerNFT(tokenId, msg.sender);
         uint256 index = tokenId; // Assuming tokenId is used as index
@@ -70,7 +70,8 @@ contract Market is OwnerIsCreator {
             currentPrice: price,
             decrementStep: step,
             isActive: true,
-            lastBider : address (custodian.nftRegistry(tokenId).owner)
+            ownerOf : address (custodian.nftRegistry(tokenId).owner),
+            startTime: block.timestamp
         });
     }
 
@@ -84,7 +85,6 @@ contract Market is OwnerIsCreator {
         uint256 referralReward = (auction.decrementStep * 5) / 100;
 
         auction.currentPrice -= decreaseAmount;
-        auction.lastBider = msg.sender;
         rdcToken.transfer(platformWallet, platformFee * 50 / 100);
         rdcToken.transfer(gasWallet, platformFee * 50 / 100);
 
@@ -95,19 +95,49 @@ contract Market is OwnerIsCreator {
             rdcToken.transfer(user.referrer, reward);
         } 
 
-        emit PriceDecreased(tokenId, auction.currentPrice);
+        emit PriceDecreased(tokenId, auction.currentPrice, msg.sender);
     }
+
+    function buy(uint256 tokenId) external {
+        Auction storage auction = auctions[tokenId];
+        require(auction.isActive, "Auction not active");
+        require(rdcToken.balanceOf(msg.sender) >= auction.currentPrice, "Insufficient balance");
+        require(rdcToken.allowance(msg.sender, address(this)) >= auction.currentPrice, "Insufficient allowance");
+        
+        // End the auction
+        auction.isActive = false;
+        
+        // Transfer funds
+        uint256 platformFee = (auction.currentPrice * 2) / 100; // Assume 2% platform fee
+        uint256 netSellerAmount = auction.currentPrice - platformFee;
+        
+        rdcToken.transferFrom(msg.sender, auction.ownerOf, netSellerAmount);
+        rdcToken.transferFrom(msg.sender, platformWallet, platformFee);
+        
+    
+        // Register the buyer as the new owner in the custodian contract
+        custodian.endAuction(tokenId, msg.sender);
+        
+        // Emit event (optional)
+        emit AuctionConcluded(tokenId, msg.sender, auction.currentPrice);
+    }
+
 
     function endAuction(uint256 tokenId) external onlyOwner {
         Auction storage auction = auctions[tokenId];
         require(auction.isActive, "Auction not active");
         auction.isActive = false;
-        custodian.endAuction(tokenId, auction.lastBider);
+        custodian.endAuction(tokenId, auction.ownerOf);
     }
 
     function registerReferral(address referrer) external {
         require(users[msg.sender].referrer == address(0), "Referrer already set");
         users[msg.sender].referrer = referrer;
         users[referrer].referralCount++;
+    }
+
+    function setStep(uint _step)external onlyOwner{
+        require(_step < MINIMUM_PRICE, "Step can't be high than minimum price");
+        step = _step;
     }
 }

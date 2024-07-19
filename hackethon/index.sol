@@ -5,7 +5,7 @@ import {IERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-sol
 import {SafeERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OwnerIsCreator} from "@chainlink/contracts-ccip/src/v0.8/shared/access/OwnerIsCreator.sol";
 
-import "@openzeppelin/contracts/utils/Address.sol";
+// import "@openzeppelin/contracts/utils/Address.sol";
 
 interface IPancakeRouter {
     function WETH() external pure returns (address);
@@ -14,12 +14,12 @@ interface IPancakeRouter {
     function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts);
     function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts);
 }
-// ["0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7"],
+// ["0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7","0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7","0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7","0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7","0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7"],
 contract MemeIndex is OwnerIsCreator {
     using SafeERC20 for IERC20;
-    using Address for address;
+    // using Address for address;
 
-    IPancakeRouter public immutable pancakeRouter; //0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
+    IPancakeRouter public  pancakeRouter; //0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
     uint256 public feePercentage = 10; // Fee percentage (10%)
 
     struct Index {
@@ -49,13 +49,14 @@ contract MemeIndex is OwnerIsCreator {
     event FeeCollected(address indexed owner, uint256 fee);
     event IndexSold(address indexed user, uint256 indexed indexId, uint256 totalReturn);
 
-    constructor(address _pancakeRouter) {
-        pancakeRouter = IPancakeRouter(_pancakeRouter);
+    constructor() {
     }
-
+    function setRouter(address _router) external onlyOwner{
+        pancakeRouter = IPancakeRouter(_router);
+    }
     function createIndex(address[] calldata tokens, uint256[] calldata percentages) external onlyOwner {
         require(tokens.length == percentages.length, "Tokens and percentages length mismatch");
-        require(tokens.length == 1, "There must be exactly 5 tokens");
+        require(tokens.length >= 1, "There must be no less than 1 token");
         uint256 totalPercentage = 0;
         for (uint256 i = 0; i < percentages.length; i++) {
             totalPercentage += percentages[i];
@@ -118,8 +119,8 @@ contract MemeIndex is OwnerIsCreator {
         uint256 fee = (totalReturn * feePercentage) / 100;
         uint256 userAmount = totalReturn - fee;
 
-        Address.sendValue(payable(owner()), fee);
-        Address.sendValue(payable(msg.sender), userAmount);
+        payable(owner()).transfer(fee);
+        payable(msg.sender).transfer(userAmount);
 
         // Update the user's index to reflect the sale
         userIndex.bnbSpent -= bnbAmount;

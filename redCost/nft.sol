@@ -21,7 +21,17 @@ contract RedCostNFT is ERC721URIStorage, OwnerIsCreator {
         uint256 newTokenId = _tokenIds;
         _mint(to, newTokenId);
         _setTokenURI(newTokenId, tokenURI);
-
         return newTokenId;
     }
 }
+
+
+// User approve nft for custodian contract
+// after that deposit nft
+// Creator set auction parameters and start auction
+// Buyer who hes our tokens
+// now buyer balance hes 999 ether(token)
+// Also owner need set step for decreasing 20 ether
+// User will give approve for tokens before decreasing
+// Now for buy user will approve price count and call buy function
+// In the end buyer can wildrow his nft

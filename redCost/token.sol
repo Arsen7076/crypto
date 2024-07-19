@@ -11,6 +11,9 @@ contract RedCostToken is ERC20, OwnerIsCreator, ERC20Burnable {
     constructor() ERC20("RedCostToken", "RDC") {
         // Initial mint can be done here if needed
         _mint(msg.sender, 1000000 * 10 ** decimals()); // Minting 1,000,000 RDC for example
+        // _mint(address(0x9DE3672f6E3Cf438B3f54B85848343cd0003182A), 1000000 * 10 ** decimals()); // Minting 1,000,000 RDC for example
+        // _mint(msg.sender, 1000000 * 10 ** decimals()); // Minting 1,000,000 RDC for example
+
     }
 
     /**
