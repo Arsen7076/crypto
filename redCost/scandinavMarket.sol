@@ -30,6 +30,7 @@ contract Market is OwnerIsCreator {
         bool isActive;
         address ownerOf;
         uint256 startTime;
+        uint256 endTime;
     }
 
     struct User {
@@ -60,7 +61,7 @@ contract Market is OwnerIsCreator {
         gasWallet = _gasWallet;
     }
 
-    function setAuctionParameters(uint256 tokenId, uint256 price) external onlyOwner {
+    function setAuctionParameters(uint256 tokenId, uint256 price, uint8 _days) external onlyOwner {
         require(price >= MINIMUM_PRICE, "Price must be at least $99");
         require(custodian.nftRegistry(tokenId).isAuctionActive, "Auctoin is not allowed ");
         // custodian.registerNFT(tokenId, msg.sender);
@@ -71,7 +72,8 @@ contract Market is OwnerIsCreator {
             decrementStep: step,
             isActive: true,
             ownerOf : address (custodian.nftRegistry(tokenId).owner),
-            startTime: block.timestamp
+            startTime: block.timestamp,
+            endTime: block.timestamp + (_days * 1 days) 
         });
     }
 
