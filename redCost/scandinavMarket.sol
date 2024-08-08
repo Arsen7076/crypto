@@ -38,7 +38,7 @@ contract Market is OwnerIsCreator {
         address referrer;
     }
 
-    mapping(uint256 => Auction) public auctions; // Index to Auction
+    mapping(uint256 => Auction) private auctions; // Index to Auction
     mapping(address => User) public users;
 
     address payable public platformWallet;
@@ -83,13 +83,10 @@ contract Market is OwnerIsCreator {
         require(rdcToken.transferFrom(msg.sender, address(this), auction.decrementStep), "Failed to transfer tokens");
 
         uint256 decreaseAmount = (auction.decrementStep * 75) / 100;
-        uint256 platformFee = (auction.decrementStep * 20) / 100;
         uint256 referralReward = (auction.decrementStep * 5) / 100;
 
         auction.currentPrice -= decreaseAmount;
-        rdcToken.transfer(platformWallet, platformFee * 50 / 100);
-        rdcToken.transfer(gasWallet, platformFee * 50 / 100);
-
+   
         User memory user = users[msg.sender];
         if (user.referralCount > 10) {
             uint256 rewardPercentage = user.referralCount < 20 ? 2 : user.referralCount < 30 ? 4 : 5;
@@ -114,7 +111,6 @@ contract Market is OwnerIsCreator {
         uint256 netSellerAmount = auction.currentPrice - platformFee;
         
         rdcToken.transferFrom(msg.sender, auction.ownerOf, netSellerAmount);
-        rdcToken.transferFrom(msg.sender, platformWallet, platformFee);
         
     
         // Register the buyer as the new owner in the custodian contract
@@ -141,5 +137,9 @@ contract Market is OwnerIsCreator {
     function setStep(uint _step)external onlyOwner{
         require(_step < MINIMUM_PRICE, "Step can't be high than minimum price");
         step = _step;
+    }
+
+    function getAuction(uint256 _index)external view  onlyOwner returns( Auction memory ){
+        return auctions[_index];
     }
 }

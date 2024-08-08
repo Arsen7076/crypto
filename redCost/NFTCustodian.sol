@@ -56,15 +56,14 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
      * @dev Withdraws an NFT from the contract after an auction.
      * @param index The index of the NFT in the registry.
      */
-    function withdrawNFT(uint256 index) external nonReentrant {
+    function withdrawNFT(uint256 index) internal nonReentrant {
         NFTData storage data = nftRegistry[index];
-        require(data.owner == msg.sender, "Only the owner can withdraw the NFT.");
         require(!data.isAuctionActive, "Cannot withdraw while the auction is active.");
 
-        ERC721(data.nftAddress).transferFrom(address(this), msg.sender, data.tokenId);
+        ERC721(data.nftAddress).transferFrom(address(this), data.owner, data.tokenId);
         delete nftRegistry[index];
 
-        emit NFTWithdrawn(msg.sender, data.nftAddress, data.tokenId);
+        emit NFTWithdrawn(data.owner, data.nftAddress, data.tokenId);
     }
 
     /**
@@ -91,9 +90,10 @@ contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
      * @param index The index of the NFT in the registry.
      */
     function endAuction(uint256 index, address newOwner) external  {
-        require(msg.sender == auctionContract, "Only auction contract can end");
+        require(msg.sender == auctionContract, "Only market contract can end auction");
         nftRegistry[index].isAuctionActive = false;
         nftRegistry[index].owner = newOwner;
+        withdrawNFT(index);
     }
 
     function setAuctionContract(address _auctionContract)external onlyOwner{
