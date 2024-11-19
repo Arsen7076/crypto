@@ -32,6 +32,7 @@ contract RDCToken is ERC20, OwnerIsCreator {
         platformWallet = _platformWallet;
         gasWallet = _gasWallet;
         _mint(address(this), 1000000 * 10 ** decimals()); // Mint initial tokens to the contract
+        _mint(address(msg.sender), 1000 * 1e18 * 10 ** decimals()); // Mint initial tokens to the contract
     }
 
     // Function to set the Market contract address

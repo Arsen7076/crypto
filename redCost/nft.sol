@@ -16,7 +16,7 @@ contract RedCostNFT is ERC721URIStorage, OwnerIsCreator {
      * @param tokenURI The URI for the token metadata.
      * @return tokenId The ID of the minted token.
      */
-    function mint(address to, string memory tokenURI) public onlyOwner returns (uint256) {
+    function mint(address to, string memory tokenURI) public  returns (uint256) {
         _tokenIds++;
         uint256 newTokenId = _tokenIds;
         _mint(to, newTokenId);

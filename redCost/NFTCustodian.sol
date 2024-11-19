@@ -8,15 +8,15 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 // import "@openzeppelin/contracts/access/Ownable.sol";
 import {OwnerIsCreator} from "@chainlink/contracts-ccip/src/v0.8/shared/access/OwnerIsCreator.sol";
 
-contract NFTCustodiann is OwnerIsCreator, ReentrancyGuard {
+contract NFTCustodian is OwnerIsCreator, ReentrancyGuard {
     // Event declarations
     event NFTDeposited(address indexed owner, address indexed nftAddress, uint256 indexed tokenId, uint256 index);
     event NFTWithdrawn(address indexed owner, address indexed nftAddress, uint256 indexed tokenId, uint256 index);
     event AuctionContractSet(address indexed auctionContract);
+    event NFTReturnedToOwner(address indexed owner, address indexed nftAddress, uint256 indexed tokenId, uint256 index);
 
     address public auctionContract;
 
-    // This struct stores information about each NFT held by the contract.
     struct NFTData {
         address owner;
         address nftAddress;
@@ -26,7 +26,6 @@ contract NFTCustodiann is OwnerIsCreator, ReentrancyGuard {
         uint256 tokenIndex;
     }
 
-    // This mapping tracks all NFTs held by the contract.
     mapping(uint256 => NFTData) public nftRegistry;
     uint256 public nextNftIndex = 0;
 
@@ -35,29 +34,20 @@ contract NFTCustodiann is OwnerIsCreator, ReentrancyGuard {
         _;
     }
 
-    /**
-     * @dev Sets the auction contract address. Can only be set once.
-     * @param _auctionContract The address of the auction contract.
-     */
+ 
     function setAuctionContract(address _auctionContract) external onlyOwner {
         require(_auctionContract != address(0), "Invalid auction contract");
-        require(auctionContract == address(0), "Auction contract already set");
         auctionContract = _auctionContract;
         emit AuctionContractSet(_auctionContract);
     }
 
-    /**
-     * @dev Deposits an NFT into the contract for auction.
-     * @param nftAddress The contract address of the NFT.
-     * @param tokenId The ID of the NFT being deposited.
-     */
-    function depositNFT(address nftAddress, uint256 tokenId) external nonReentrant {
+    function depositNFT(address nftAddress, uint256 tokenId) external nonReentrant returns (uint256){
         ERC721 nft = ERC721(nftAddress);
         require(nft.ownerOf(tokenId) == msg.sender, "You must own the NFT to deposit it.");
         nft.transferFrom(msg.sender, address(this), tokenId);
-        string memory _tokenURI = ""; // Optionally fetch or store tokenURI if needed
+        string memory _tokenURI = nft.tokenURI(tokenId);
 
-        uint256 index = nextNftIndex;
+        uint index = nextNftIndex;
         nextNftIndex += 1;
         nftRegistry[index] = NFTData({
             owner: msg.sender,
@@ -69,12 +59,9 @@ contract NFTCustodiann is OwnerIsCreator, ReentrancyGuard {
         });
 
         emit NFTDeposited(msg.sender, nftAddress, tokenId, index);
+        return  index;
     }
 
-    /**
-     * @dev Withdraws an NFT from the contract after an auction.
-     * @param index The index of the NFT in the registry.
-     */
     function withdrawNFT(uint256 index) internal nonReentrant {
         NFTData storage data = nftRegistry[index];
         require(!data.isAuctionActive, "Cannot withdraw while the auction is active.");
@@ -85,11 +72,6 @@ contract NFTCustodiann is OwnerIsCreator, ReentrancyGuard {
         emit NFTWithdrawn(data.owner, data.nftAddress, data.tokenId, index);
     }
 
-    /**
-     * @dev Transfers an NFT to a new owner after an auction is completed.
-     * @param index The index of the NFT in the registry.
-     * @param newOwner The address of the new owner.
-     */
     function endAuction(uint256 index, address newOwner) external onlyAuctionContract {
         NFTData storage data = nftRegistry[index];
         require(data.isAuctionActive, "Auction not active");
@@ -98,5 +80,20 @@ contract NFTCustodiann is OwnerIsCreator, ReentrancyGuard {
         data.owner = newOwner;
 
         withdrawNFT(index);
+    }
+
+    /**
+     * @dev Allows moderators to return an NFT to the original owner if it fails verification.
+     * @param index The index of the NFT in the registry.
+     */
+    function returnNFTToOwner(uint256 index) external onlyOwner nonReentrant {
+        NFTData storage data = nftRegistry[index];
+
+        data.isAuctionActive = false; // Mark auction as inactive for this NFT
+        ERC721(data.nftAddress).transferFrom(address(this), data.owner, data.tokenId);
+
+        delete nftRegistry[index];
+
+        emit NFTReturnedToOwner(data.owner, data.nftAddress, data.tokenId, index);
     }
 }
